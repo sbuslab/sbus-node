@@ -1,2 +1,5 @@
-module.exports.sbus = require('./lib/sbus');
-module.exports.RabbitMqTransport = require('./lib/rabbitmq/RabbitMqTransport');
+/* eslint-disable global-require */
+module.exports = {
+  Sbus: require('./lib/sbus'),
+  RabbitMqTransport: require('./lib/rabbitmq/RabbitMqTransport'),
+};
