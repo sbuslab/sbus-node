@@ -1,6 +1,6 @@
 {
   "name": "sbus-node",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Service Bus for nodeJs services with RabbitMQ transport",
   "dependencies": {
     "amqplib": "^0.5.2",
