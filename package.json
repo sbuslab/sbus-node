@@ -1,6 +1,6 @@
 {
   "name": "sbus-node",
-  "version": "1.0.20",
+  "version": "1.0.21",
   "description": "Service Bus for nodeJs services with RabbitMQ transport",
   "keywords": [
     "RabbitMQ",
@@ -13,7 +13,7 @@
   "license": "MIT",
   "author": "Andrey Pshenkin <andrey.pshenkin@gmail.com>",
   "main": "dist/index.js",
-  "types": "dist/index",
+  "types": "dist/index.d.ts",
   "scripts": {
     "clean": "rimraf dist",
     "build": "npm run clean && tsc",
