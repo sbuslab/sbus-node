@@ -1,9 +1,17 @@
 {
-  "extends": "airbnb-base",
-  "globals": {
-    "describe": false,
-    "it": false,
-    "before": false
+  "extends": ["airbnb-typescript/base"],
+  "parserOptions": {
+    "project": "./tsconfig.json"
+  },
+  "overrides": [
+    {"files": ["*.ts", "*.tsx"]}
+  ],
+  "settings": {
+    "import/resolver": {
+      "node": {
+        "extensions": [".js", ".jsx", ".ts", ".tsx"]
+      }
+    }
   },
   "rules": {
     "no-console": [
@@ -17,7 +25,12 @@
       }
     ],
     "class-methods-use-this": "off",
-    "no-underscore-dangle": "off",
+    "no-underscore-dangle": ["off", {
+      "allow": [],
+      "allowAfterThis": false,
+      "allowAfterSuper": false,
+      "enforceInMethodNames": false
+    }],
     "max-len": [
       "error",
       150,
