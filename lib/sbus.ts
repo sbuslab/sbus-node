@@ -1,5 +1,5 @@
 import { ClassType } from 'class-transformer/ClassTransformer';
-import RabbitMqTransport, { Context } from './rabbitmq/rabbitMqTransport';
+import { RabbitMqTransport, Context } from './rabbitmq/rabbitMqTransport';
 import Unit from './utils/unit';
 
 export default class Sbus {

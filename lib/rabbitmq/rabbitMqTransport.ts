@@ -80,7 +80,7 @@ interface ChannelConfig {
   routingKeys?: string[], // optional, by default get from subscriptionName
 }
 
-interface RabbitConfig {
+export interface RabbitConfig {
   host: string;
   username: string;
   password: string;
@@ -97,7 +97,7 @@ interface RabbitConfig {
   channels: { [key: string]: ChannelOptions }
 }
 
-export default class RabbitMqTransport {
+export class RabbitMqTransport {
   private defaultTimeout: number;
 
   private shutdownTimeout: number;
