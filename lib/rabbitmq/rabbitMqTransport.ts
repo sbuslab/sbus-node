@@ -236,6 +236,7 @@ export class RabbitMqTransport {
       return;
     }
 
+    this.isRunning = true;
     this.logger.debug(`Sbus connecting to: ${this.host}`);
     this.connection = await amqp.connect(this.host.split(',')
       .map((host) => `amqp://${this.username}:${this.password}@${host}:${this.port}`),
@@ -353,8 +354,6 @@ export class RabbitMqTransport {
         process.exit();
       }, this.shutdownTimeout);
     });
-
-    this.isRunning = true;
   }
 
   async send<T>(
