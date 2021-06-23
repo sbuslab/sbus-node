@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ES2015",
     "lib": [
       "es2020"
     ],
@@ -8,7 +8,7 @@
     "types": [
       "node"
     ],
-    "outDir": "./dist",
+    "outDir": "./dist/lib",
     "allowJs": false,
     "strict": true,
     "noImplicitAny": true,
@@ -26,7 +26,7 @@
     "declaration": true
   },
   "include": [
-    "**/*.ts"
+    "lib/decorators.ts"
   ],
   "exclude": [
     "node_modules/**/*",

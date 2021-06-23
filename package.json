@@ -1,6 +1,6 @@
 {
   "name": "sbus-node",
-  "version": "1.0.26",
+  "version": "1.0.27",
   "description": "Service Bus for nodeJs services with RabbitMQ transport",
   "keywords": [
     "RabbitMQ",
@@ -16,7 +16,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "clean": "rimraf dist",
-    "build": "npm run clean && tsc",
+    "build": "npm run clean && tsc && tsc -p tsconfig.decorators.json",
     "lint": "eslint ."
   },
   "dependencies": {
