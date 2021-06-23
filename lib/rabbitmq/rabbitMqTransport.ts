@@ -37,6 +37,17 @@ interface ChannelWithId extends ConfirmChannel {
   ch: number
 }
 
+async function meter<T>(typeName: string, routingKey: string, f: () => Promise<T>): Promise<T> {
+  const metric = histogram.labels(typeName, routingKey);
+  const timer = metric.startTimer();
+  try {
+    return await f();
+  } finally {
+    // @ts-ignore
+    metric.observe(timer());
+  }
+}
+
 export interface Context {
   timeout?: number,
   maxRetries?: number,
@@ -443,10 +454,8 @@ export class RabbitMqTransport {
 
     this.correlationMap[correlationId].routingKey = routingKey;
 
-    const metric = histogram.labels('request', realRoutingKey);
-    const metricTimer = metric.startTimer();
-    let response;
-    try {
+    return await meter<T>('request', realRoutingKey, async () => {
+      let response;
       try {
         response = await promiseTimeout(parseInt(propsBldr.expiration ?? '0', 10), this.correlationMap[correlationId]);
       } catch (err) {
@@ -468,16 +477,11 @@ export class RabbitMqTransport {
         const deserialized = plainToClass(cls, parsed.body);
 
         await validateOrReject(deserialized);
-        // @ts-ignore
-        metric.observe(metricTimer());
         return deserialized;
       }
 
       throw errorFromCode(parsed.status, parsed.body);
-    } finally {
-      // @ts-ignore
-      metric.observe(metricTimer());
-    }
+    });
   }
 
   async subscribe<T>(routingKey: string, handler: (req: any, ctx: Context) => Promise<T>): Promise<void> {
@@ -534,53 +538,115 @@ export class RabbitMqTransport {
         }
 
         return rTracer.runWithId(async () => {
-          const metric = histogram.labels('handle', subscriptionName);
-          const metricTimer = metric.startTimer();
-          const correlationId = msg.properties.headers['correlation-id'];
+          await meter('handle', subscriptionName, async () => {
+            const correlationId = msg.properties.headers['correlation-id'];
 
-          let payload;
-          try {
-            payload = JSON.parse(msg.content.toString()).body;
-          } catch (e) {
-            payload = msg.content.toString();
-          }
-
-          if (correlationId === 'sbus:ping') {
-            const pingAt = payload.ping || 0;
-            eventsHeartbeat.labels(routingKey).set(Date.now() - pingAt);
-            // @ts-ignore
-            metric.observe(metricTimer());
-            return;
-          }
-
-          _this.logs('<~~~', subscriptionName, msg.content);
-
-          const context = {
-            timeout: toNumber(msg.properties.headers.timeout),
-            maxRetries: toNumber(msg.properties.headers['retry-max-attempts']),
-            attemptNr: toNumber(msg.properties.headers['retry-attempt-nr']),
-            correlationId: msg.properties.headers['correlation-id'],
-            messageId: msg.properties.messageId,
-            routingKey: msg.properties.headers['routing-key'] || msg.fields.routingKey,
-            timestamp: toNumber(msg.properties.headers.timestamp),
-            ip: msg.properties.headers.ip,
-            userAgent: msg.properties.headers.userAgent,
-            expiredAt: toNumber(msg.properties.headers['expired-at']),
-          };
-
-          if (context.expiredAt) {
-            context.timeout = Math.max(1, context.expiredAt - Date.now());
-          }
-
-          _this.contextStorage[context.messageId] = context;
-
-          try {
+            let payload;
             try {
-              const res = await Promise.resolve(handler(payload, context));
-              const bytes = Buffer.from(JSON.stringify({ status: '200', body: classToPlain(res) }, null, 2));
+              payload = JSON.parse(msg.content.toString()).body;
+            } catch (e) {
+              payload = msg.content.toString();
+            }
 
-              if (msg.properties.replyTo) {
+            if (correlationId === 'sbus:ping') {
+              const pingAt = payload.ping || 0;
+              eventsHeartbeat.labels(routingKey).set(Date.now() - pingAt);
+              return;
+            }
+
+            _this.logs('<~~~', subscriptionName, msg.content);
+
+            const context = {
+              timeout: toNumber(msg.properties.headers.timeout),
+              maxRetries: toNumber(msg.properties.headers['retry-max-attempts']),
+              attemptNr: toNumber(msg.properties.headers['retry-attempt-nr']),
+              correlationId: msg.properties.headers['correlation-id'],
+              messageId: msg.properties.messageId,
+              routingKey: msg.properties.headers['routing-key'] || msg.fields.routingKey,
+              timestamp: toNumber(msg.properties.headers.timestamp),
+              ip: msg.properties.headers.ip,
+              userAgent: msg.properties.headers.userAgent,
+              expiredAt: toNumber(msg.properties.headers['expired-at']),
+            };
+
+            if (context.expiredAt) {
+              context.timeout = Math.max(1, context.expiredAt - Date.now());
+            }
+
+            _this.contextStorage[context.messageId] = context;
+
+            try {
+              try {
+                const res = await Promise.resolve(handler(payload, context));
+                const bytes = Buffer.from(JSON.stringify({ status: '200', body: classToPlain(res) }, null, 2));
+
+                if (msg.properties.replyTo) {
+                  _this.logs('resp ~~~>', subscriptionName, bytes);
+                  await channel.producer.publish(
+                    '',
+                    msg.properties.replyTo,
+                    bytes,
+                    {
+                      correlationId: msg.properties.correlationId,
+                      headers: {
+                        'correlation-id': msg.properties.headers['correlation-id'],
+                      },
+                    },
+                  );
+                }
+                return;
+              } catch (e) {
+                if (!(e instanceof GeneralError) || e.unrecoverable) {
+                  const heads = msg.properties.headers;
+                  const attemptsMax = heads['retry-max-attempts'];
+                  const attemptNr = heads['retry-attempt-nr'] || 1;
+                  const originRoutingKey = heads['routing-key'] || msg.fields.routingKey;
+
+                  if (attemptsMax && attemptsMax >= attemptNr + 1) {
+                    heads['retry-attempt-nr'] = attemptNr + 1;
+
+                    const backoff = Math.round(2 ** Math.min(attemptNr - 1, 6)) * 1000; // max 64 seconds
+
+                    const updProps = {
+                      headers: heads,
+                      expiration: backoff, // millis, exponential backoff
+                      mandatory: false,
+                    };
+
+                    // if message will be expired before next attempt — skip it
+                    if (!e.unrecoverable && heads['expired-at'] && heads['expired-at'] <= Date.now() + backoff) {
+                      this.logs('timeout', originRoutingKey, Buffer.from(`Message will be expired at ${heads['expired-at']}, don't retry it!`), e);
+                      throw e;
+                    } else {
+                      this.logs('error', originRoutingKey, Buffer.from(`${e.message}. Retry attempt ${attemptNr} after ${backoff} millis...`), e);
+                      try {
+                        // eslint-disable-next-line max-len
+                        await channel.producer.publish(channel.retryExchange, util.format(channel.queueNameFormat, originRoutingKey), msg.content, updProps);
+                      } catch (error) {
+                        throw new InternalServerError(`Error on publish retry message for ${originRoutingKey}: ${error}`);
+                      }
+                    }
+                  } else {
+                    throw e;
+                  }
+                } else {
+                  throw e;
+                }
+              }
+            } catch (e) {
+              _this.logs('error', subscriptionName, Buffer.from(e.message), e);
+
+              if (msg.properties.replyTo != null) {
+                let response;
+                if (e instanceof GeneralError) {
+                  response = { status: e.code.toString(), body: { message: e.message, error: e.error } };
+                } else {
+                  response = { status: '500', body: { message: e.message } };
+                }
+                const bytes = Buffer.from(JSON.stringify(response, null, 2));
+
                 _this.logs('resp ~~~>', subscriptionName, bytes);
+
                 await channel.producer.publish(
                   '',
                   msg.properties.replyTo,
@@ -593,77 +659,9 @@ export class RabbitMqTransport {
                   },
                 );
               }
-              // @ts-ignore
-              metric.observe(metricTimer());
-              return;
-            } catch (e) {
-              if (!(e instanceof GeneralError) || e.unrecoverable) {
-                const heads = msg.properties.headers;
-                const attemptsMax = heads['retry-max-attempts'];
-                const attemptNr = heads['retry-attempt-nr'] || 1;
-                const originRoutingKey = heads['routing-key'] || msg.fields.routingKey;
-
-                if (attemptsMax && attemptsMax >= attemptNr + 1) {
-                  heads['retry-attempt-nr'] = attemptNr + 1;
-
-                  const backoff = Math.round(2 ** Math.min(attemptNr - 1, 6)) * 1000; // max 64 seconds
-
-                  const updProps = {
-                    headers: heads,
-                    expiration: backoff, // millis, exponential backoff
-                    mandatory: false,
-                  };
-
-                  // if message will be expired before next attempt — skip it
-                  if (!e.unrecoverable && heads['expired-at'] && heads['expired-at'] <= Date.now() + backoff) {
-                    this.logs('timeout', originRoutingKey, Buffer.from(`Message will be expired at ${heads['expired-at']}, don't retry it!`), e);
-                    throw e;
-                  } else {
-                    this.logs('error', originRoutingKey, Buffer.from(`${e.message}. Retry attempt ${attemptNr} after ${backoff} millis...`), e);
-                    try {
-                      // eslint-disable-next-line max-len
-                      await channel.producer.publish(channel.retryExchange, util.format(channel.queueNameFormat, originRoutingKey), msg.content, updProps);
-                    } catch (error) {
-                      throw new InternalServerError(`Error on publish retry message for ${originRoutingKey}: ${error}`);
-                    }
-                  }
-                } else {
-                  throw e;
-                }
-              } else {
-                throw e;
-              }
             }
-          } catch (e) {
-            _this.logs('error', subscriptionName, Buffer.from(e.message), e);
-
-            if (msg.properties.replyTo != null) {
-              let response;
-              if (e instanceof GeneralError) {
-                response = { status: e.code.toString(), body: { message: e.message, error: e.error } };
-              } else {
-                response = { status: '500', body: { message: e.message } };
-              }
-              const bytes = Buffer.from(JSON.stringify(response, null, 2));
-
-              _this.logs('resp ~~~>', subscriptionName, bytes);
-
-              await channel.producer.publish(
-                '',
-                msg.properties.replyTo,
-                bytes,
-                {
-                  correlationId: msg.properties.correlationId,
-                  headers: {
-                    'correlation-id': msg.properties.headers['correlation-id'],
-                  },
-                },
-              );
-            }
-          }
-          delete _this.contextStorage[context.messageId];
-          // @ts-ignore
-          metric.observe(metricTimer());
+            delete _this.contextStorage[context.messageId];
+          });
         }, { messageId: msg.properties.messageId, correlationId: msg.properties.headers['correlation-id'] });
       }, { noAck: true });
 
