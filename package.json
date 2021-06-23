@@ -39,8 +39,8 @@
   "peerDependencies": {
     "class-transformer": "0.3.1",
     "class-validator": "0.12.2",
+    "cls-rtracer": "2.6.0",
     "prom-client": "13.1.0",
-    "reflect-metadata": "0.1.13",
-    "cls-rtracer": "2.6.0"
+    "reflect-metadata": "0.1.13"
   }
 }

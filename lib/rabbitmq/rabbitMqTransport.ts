@@ -9,7 +9,7 @@ import { ClassType } from 'class-transformer/ClassTransformer';
 import { v4 as uuidv4 } from 'uuid';
 import { ExternalPromise, PROMISE_TIMEOUT_MESSAGE, promiseTimeout } from '../utils/promiseTimeout';
 import {
-  InternalServerError, NotFoundError, GeneralError, errorFromCode,
+  errorFromCode, GeneralError, InternalServerError, NotFoundError,
 } from '../model/errorMessage';
 import Unit from '../utils/unit';
 
@@ -95,6 +95,14 @@ export interface RabbitConfig {
   autoinit: boolean;
   logger?: Logger;
   channels: { [key: string]: ChannelOptions }
+}
+
+function toNumber(stringNumber?: string): number | undefined {
+  if (typeof stringNumber === 'string') {
+    return parseInt(stringNumber, 10);
+  }
+
+  return stringNumber;
 }
 
 export class RabbitMqTransport {
@@ -320,7 +328,7 @@ export class RabbitMqTransport {
 
       await channel.consume(_this.replyToQueue, async (msg: ConsumeMessage | null) => {
         if (msg == null) {
-          _this.logger.warn('recieve null message in rpcClient channel');
+          _this.logger.warn('receive null message in rpcClient channel');
           return;
         }
 
@@ -462,11 +470,8 @@ export class RabbitMqTransport {
         await validateOrReject(deserialized);
         return deserialized;
       }
-      throw errorFromCode(parsed.status, parsed.body);
-    } catch (e) {
-      promTimer();
 
-      throw e;
+      throw errorFromCode(parsed.status, parsed.body);
     } finally {
       promTimer();
     }
@@ -503,11 +508,10 @@ export class RabbitMqTransport {
     await rpcServer.addSetup(async (ch: ChannelWithId) => {
       await ch.prefetch(this.channelParams.qos, this.channelParams.global);
 
-      const foo = util.format(channel.queueNameFormat, subscriptionName);
-      const queue = await ch.assertQueue(foo, {
+      const queue = await ch.assertQueue(util.format(channel.queueNameFormat, subscriptionName), {
         durable: channel.durable,
-        // exclusive: channel.exclusive,
-        // autoDelete: channel.autoDelete,
+        exclusive: channel.exclusive,
+        autoDelete: channel.autoDelete,
       });
 
       // eslint-disable-next-line no-restricted-syntax
@@ -544,14 +548,6 @@ export class RabbitMqTransport {
           }
 
           _this.logs('<~~~', subscriptionName, msg.content);
-
-          function toNumber(stringNumber?: string): number | undefined {
-            if (typeof stringNumber === 'string') {
-              return parseInt(stringNumber, 10);
-            }
-
-            return stringNumber;
-          }
 
           const context = {
             timeout: toNumber(msg.properties.headers.timeout),
