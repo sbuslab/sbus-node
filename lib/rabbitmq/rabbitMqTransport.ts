@@ -443,8 +443,8 @@ export class RabbitMqTransport {
 
     this.correlationMap[correlationId].routingKey = routingKey;
 
-    const promTimer = histogram.labels('request', realRoutingKey).startTimer();
-
+    const metric = histogram.labels('request', realRoutingKey);
+    const metricTimer = metric.startTimer();
     let response;
     try {
       try {
@@ -468,12 +468,15 @@ export class RabbitMqTransport {
         const deserialized = plainToClass(cls, parsed.body);
 
         await validateOrReject(deserialized);
+        // @ts-ignore
+        metric.observe(metricTimer());
         return deserialized;
       }
 
       throw errorFromCode(parsed.status, parsed.body);
     } finally {
-      promTimer();
+      // @ts-ignore
+      metric.observe(metricTimer());
     }
   }
 
@@ -531,7 +534,8 @@ export class RabbitMqTransport {
         }
 
         return rTracer.runWithId(async () => {
-          const promTimer = histogram.labels('handle', subscriptionName).startTimer();
+          const metric = histogram.labels('handle', subscriptionName);
+          const metricTimer = metric.startTimer();
           const correlationId = msg.properties.headers['correlation-id'];
 
           let payload;
@@ -544,6 +548,8 @@ export class RabbitMqTransport {
           if (correlationId === 'sbus:ping') {
             const pingAt = payload.ping || 0;
             eventsHeartbeat.labels(routingKey).set(Date.now() - pingAt);
+            // @ts-ignore
+            metric.observe(metricTimer());
             return;
           }
 
@@ -587,6 +593,8 @@ export class RabbitMqTransport {
                   },
                 );
               }
+              // @ts-ignore
+              metric.observe(metricTimer());
               return;
             } catch (e) {
               if (!(e instanceof GeneralError) || e.unrecoverable) {
@@ -654,7 +662,8 @@ export class RabbitMqTransport {
             }
           }
           delete _this.contextStorage[context.messageId];
-          promTimer();
+          // @ts-ignore
+          metric.observe(metricTimer());
         }, { messageId: msg.properties.messageId, correlationId: msg.properties.headers['correlation-id'] });
       }, { noAck: true });
 
