@@ -395,7 +395,7 @@ export class RabbitMqTransport {
 
   async send<T>(
     routingKey: string,
-    msg: object | null,
+    msg: string | object | null,
     cls: ClassType<T>,
     context: Context = {},
     transportOptions: { hasResponse?: boolean } = {},

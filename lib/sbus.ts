@@ -9,15 +9,15 @@ export default class Sbus {
     this.transport = transport;
   }
 
-  async request<T>(routingKey: string, msg: object | null = null, cls: ClassType<T>, context: Context = {}): Promise<T> {
+  async request<T>(routingKey: string, msg: string | object | null = null, cls: ClassType<T>, context: Context = {}): Promise<T> {
     return this.transport.send<T>(routingKey, msg, cls, context, { hasResponse: true });
   }
 
-  async command(routingKey: string, msg: object | null = null, context: Context = {}): Promise<void> {
+  async command(routingKey: string, msg: string | object | null = null, context: Context = {}): Promise<void> {
     return this.transport.send(routingKey, msg, Unit, context).then(() => undefined);
   }
 
-  async event(routingKey: string, msg: object | null = null, context: Context = {}): Promise<void> {
+  async event(routingKey: string, msg: string | object | null = null, context: Context = {}): Promise<void> {
     return this.transport.send((routingKey.includes(':') ? '' : 'events:') + routingKey, msg, Unit, context).then(() => undefined);
   }
 
