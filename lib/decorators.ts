@@ -22,7 +22,9 @@ export function subscribe(routingKey: string) {
         const promises: any[] = [];
 
         transformedArgs.forEach((arg: any) => {
-          promises.push(validateOrReject(arg));
+          if (arg != null && !['string', 'number'].includes(typeof arg) && arg.constructor != null) {
+            promises.push(validateOrReject(arg));
+          }
         });
 
         try {
