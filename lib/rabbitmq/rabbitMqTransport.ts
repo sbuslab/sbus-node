@@ -143,6 +143,8 @@ export class RabbitMqTransport {
 
   private isRunning: boolean;
 
+  private isInited: boolean;
+
   private replyToQueue: string;
 
   private connection: AmqpConnectionManager;
@@ -236,8 +238,8 @@ export class RabbitMqTransport {
     this.port = conf.port;
     this.username = conf.username;
     this.password = conf.password;
-    // running status
-    this.isRunning = false;
+    this.isRunning = false; // running status
+    this.isInited = false;
     this.promiseStorage = {}; // promises storage for requests
     this.rpcServers = {}; // subscription channels
 
@@ -251,11 +253,22 @@ export class RabbitMqTransport {
   }
 
   async connect() {
-    if (this.isRunning) {
-      return;
+    if (this.isInited) {
+      if (this.isRunning) {
+        return Promise.resolve();
+      }
+
+      return new Promise((resolve) => {
+        const timerId = setInterval(() => {
+          if (this.isRunning) {
+            clearInterval(timerId);
+            resolve(undefined);
+          }
+        }, 10);
+      });
     }
 
-    this.isRunning = true;
+    this.isInited = true;
     this.logger.debug(`Sbus connecting to: ${this.host}`);
     this.connection = await amqp.connect(this.host.split(',')
       .map((host) => `amqp://${this.username}:${this.password}@${host}:${this.port}`),
@@ -373,6 +386,11 @@ export class RabbitMqTransport {
         process.exit();
       }, this.shutdownTimeout);
     });
+
+    this.isRunning = true;
+
+    // eslint-disable-next-line consistent-return,no-useless-return
+    return;
   }
 
   async send<T>(

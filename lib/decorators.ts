@@ -37,7 +37,15 @@ export function subscribe(routingKey: string) {
     if (!INITED_SUBSCRIPTIONS.has(target.constructor.name)) {
       INITED_SUBSCRIPTIONS.set(target.constructor.name, []);
     }
-    INITED_SUBSCRIPTIONS.get(target.constructor.name)!.push({ routingKey, handler: descriptor });
+    INITED_SUBSCRIPTIONS.get(target.constructor.name)!.push({ routingKey, handler: descriptor, schedulePeriod: target.schedulePeriod });
+  };
+}
+
+export function schedule(period: number) {
+  // @ts-ignore
+  // eslint-disable-next-line func-names,@typescript-eslint/no-unused-vars
+  return function (target: any, propertyKey: string, descriptor: InitMethodDescriptor) {
+    target.schedulePeriod = period;
   };
 }
 
@@ -61,6 +69,13 @@ export function autoSubscribe(target: any) {
       for (const subscription of subscriptions) {
         // eslint-disable-next-line no-await-in-loop
         await inited.sbus.on(subscription.routingKey, subscription.handler.value.bind(inited));
+        if (subscription.schedulePeriod) {
+          // eslint-disable-next-line no-await-in-loop
+          await inited.sbus.command('scheduler.schedule', {
+            period: subscription.schedulePeriod,
+            routingKey: subscription.routingKey,
+          });
+        }
       }
     }
   };
