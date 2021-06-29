@@ -533,20 +533,20 @@ export class RabbitMqTransport {
     await rpcServer.addSetup(async (ch: ChannelWithId) => {
       await ch.prefetch(this.channelParams.qos, this.channelParams.global);
 
-      const queue = await ch.assertQueue(util.format(channel.queueNameFormat, subscriptionName), {
+      const queue = await ch.assertQueue(channel.queueNameFormat.replace('%s', subscriptionName), {
         durable: channel.durable,
         exclusive: channel.exclusive,
         autoDelete: channel.autoDelete,
       });
 
       // eslint-disable-next-line no-restricted-syntax
-      for (const rt of [...new Set(
-        (channel.routingKeys ?? [subscriptionName])
-          // add routingKey with channel prefix for handling retried messages
-          .flatMap((rtKey) => [rtKey, util.format(channel.queueNameFormat, rtKey)]),
-      )]) {
+      // eslint-disable-next-line no-restricted-syntax
+      for (const rt of [...new Set((channel.routingKeys ?? [subscriptionName])
+        // add routingKey with channel prefix for handling retried messages
+        .flatMap((rtKey) => [rtKey, channel.queueNameFormat.replace('%s', rtKey)])
+        .filter((rtKey) => rtKey !== ''))]) {
         // eslint-disable-next-line no-await-in-loop
-        await ch.bindQueue(rt, channel.exchange, subscriptionName);
+        await ch.bindQueue(queue.queue, channel.exchange, rt);
       }
 
       const consumer = await ch.consume(queue.queue, (msg: ConsumeMessage | null) => {

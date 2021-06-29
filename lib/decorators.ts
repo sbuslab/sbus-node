@@ -60,7 +60,7 @@ export function autoSubscribe(target: any) {
   // eslint-disable-next-line func-names
   const f : any = async function (...args: any[]) {
     // eslint-disable-next-line new-cap
-    const inited = new original(...args); // according the comments
+    const inited = await new original(...args); // here constructor is with await for cases of other async decorators
 
     // @ts-ignore
     // eslint-disable-next-line no-proto
