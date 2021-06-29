@@ -639,7 +639,7 @@ export class RabbitMqTransport {
                       this.logs('error', originRoutingKey, Buffer.from(`${e.message}. Retry attempt ${attemptNr} after ${backoff} millis...`), e);
                       try {
                         // eslint-disable-next-line max-len
-                        await channel.producer.publish(channel.retryExchange, util.format(channel.queueNameFormat, originRoutingKey), msg.content, updProps);
+                        await channel.producer.publish(channel.retryExchange, channel.queueNameFormat.replace('%s', originRoutingKey), msg.content, updProps);
                       } catch (error) {
                         throw new InternalServerError(`Error on publish retry message for ${originRoutingKey}: ${error}`);
                       }
