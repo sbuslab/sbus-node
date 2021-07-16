@@ -652,14 +652,15 @@ export class RabbitMqTransport {
                 }
               }
             } catch (e) {
-              _this.logs('error', subscriptionName, Buffer.from(e.message), e);
+              const errMsg = e.message ? e.message : e.toString()
+              _this.logs('error', subscriptionName, Buffer.from(errMsg), e);
 
               if (msg.properties.replyTo != null) {
                 let response;
                 if (e instanceof GeneralError) {
-                  response = { status: e.code.toString(), body: { message: e.message, error: e.error } };
+                  response = { status: e.code.toString(), body: { message: errMsg, error: e.error } };
                 } else {
-                  response = { status: '500', body: { message: e.message } };
+                  response = { status: '500', body: { message: errMsg } };
                 }
                 const bytes = Buffer.from(JSON.stringify(response, null, 2));
 
