@@ -1,6 +1,6 @@
 {
   "name": "sbus-node",
-  "version": "1.0.34",
+  "version": "1.0.35",
   "description": "Service Bus for nodeJs services with RabbitMQ transport",
   "keywords": [
     "RabbitMQ",
@@ -22,7 +22,8 @@
   "dependencies": {
     "amqp-connection-manager": "^3.2.2",
     "amqplib": "^0.8.0",
-    "uuid": "^8.3.1"
+    "uuid": "^8.3.1",
+    "moment": "^2.29.1"
   },
   "devDependencies": {
     "@types/amqp-connection-manager": "^2.0.11",

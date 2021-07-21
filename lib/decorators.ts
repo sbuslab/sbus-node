@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { plainToClass } from 'class-transformer';
 import { validateOrReject } from 'class-validator';
+import moment, {DurationInputArg2} from 'moment';
 import { BadRequestError } from './model/errorMessage';
 
 const INITED_SUBSCRIPTIONS = new Map<string, any[]>();
@@ -43,11 +44,12 @@ export function subscribe(routingKey: string) {
   };
 }
 
-export function schedule(period: number) {
+export function schedule(period: string) {
   // @ts-ignore
   // eslint-disable-next-line func-names,@typescript-eslint/no-unused-vars
   return function (target: any, propertyKey: string, descriptor: InitMethodDescriptor) {
-    target.schedulePeriod = period;
+    const duration = period.split(' ');
+    target.schedulePeriod = moment.duration(parseInt(duration[0], 10), duration[1] as DurationInputArg2);
   };
 }
 
