@@ -49,7 +49,7 @@ export function schedule(period: string) {
   // eslint-disable-next-line func-names,@typescript-eslint/no-unused-vars
   return function (target: any, propertyKey: string, descriptor: InitMethodDescriptor) {
     const duration = period.split(' ');
-    target.schedulePeriod = moment.duration(parseInt(duration[0], 10), duration[1] as DurationInputArg2);
+    target.schedulePeriod = moment.duration(parseInt(duration[0], 10), duration[1] as DurationInputArg2).asMilliseconds();
   };
 }
 
