@@ -40,7 +40,7 @@ export function subscribe(routingKey: string) {
     if (!INITED_SUBSCRIPTIONS.has(target.constructor.name)) {
       INITED_SUBSCRIPTIONS.set(target.constructor.name, []);
     }
-    INITED_SUBSCRIPTIONS.get(target.constructor.name)!.push({ routingKey, handler: descriptor, schedulePeriod: target.schedulePeriod });
+    INITED_SUBSCRIPTIONS.get(target.constructor.name)!.push({ propertyKey, routingKey, handler: descriptor });
   };
 }
 
