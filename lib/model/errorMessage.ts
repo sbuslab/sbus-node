@@ -91,6 +91,18 @@ export class ServiceUnavailableError extends GeneralError {
   }
 }
 
+export class UnrecoverableError extends GeneralError {
+  constructor(error: ErrorMessage | string | Error) {
+    super(456, 'UnrecoverableError', error, true);
+  }
+}
+
+export class RecoverableError extends GeneralError {
+  constructor(error: ErrorMessage | string | Error) {
+    super(449, 'RecoverableError', error);
+  }
+}
+
 export function errorFromCode(code: number, body: ErrorMessage | string): GeneralError {
   switch (code) {
     case 400:
@@ -107,6 +119,10 @@ export function errorFromCode(code: number, body: ErrorMessage | string): Genera
       return new ConflictError(body);
     case 429:
       return new TooManyRequestError(body);
+    case 456:
+      return new UnrecoverableError(body);
+    case 449:
+      return new RecoverableError(body);
     case 500:
       return new InternalServerError(body);
     case 503:
