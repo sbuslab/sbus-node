@@ -717,7 +717,18 @@ export class RabbitMqTransport {
 
   private logs(prefix: string, routingKey: string, body: Buffer, e?: Error): void {
     if (e != null || !this.unloggedRequests.includes(routingKey)) {
-      const msg = `sbus ${prefix} ${routingKey}: ${body.toString()}`;
+      let bodyString;
+      try {
+        if (typeof process.env.ENV === 'undefined') {
+          bodyString = JSON.stringify(JSON.parse(body.toString()), null, 2);
+        } else {
+          bodyString = body.toString();
+        }
+      } catch (err) {
+        bodyString = body.toString();
+      }
+
+      const msg = `sbus ${prefix} ${routingKey}: ${bodyString}`;
 
       if (e == null) {
         this.logger[this.logMethod](msg);
