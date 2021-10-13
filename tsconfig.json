@@ -6,7 +6,7 @@
     ],
     "module": "commonjs",
     "types": [
-      "node"
+      "node", "jest"
     ],
     "outDir": "./dist",
     "allowJs": false,

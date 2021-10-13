@@ -1,5 +1,6 @@
 import Sbus from './lib/sbus';
-import { RabbitMqTransport, RabbitConfig, Context } from './lib/rabbitmq/rabbitMqTransport';
+import { RabbitMqTransport, RabbitConfig } from './lib/rabbitmq/rabbitMqTransport';
+import { Context } from './lib/model/context';
 import { autoSubscribe, subscribe, schedule } from './lib/decorators';
 import {
   GeneralError,

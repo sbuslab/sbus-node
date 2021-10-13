@@ -12,19 +12,12 @@ import {
   errorFromCode, GeneralError, InternalServerError, NotFoundError,
 } from '../model/errorMessage';
 import Unit from '../utils/unit';
+import AuthProviderImpl, { AuthConfig, AuthProvider, NoopAuthProvider } from '../utils/authProvider';
+import { Logger } from '../model/logger';
+import { Context } from '../model/context';
 
 const eventsHeartbeat = new prometheus.Gauge({ name: 'sbus_events_heartbeat', help: 'Sbus events heartbeat', labelNames: ['routingKey'] });
 const histogram = new prometheus.Histogram({ name: 'sbus_processing_seconds', help: 'Sbus processing metrics', labelNames: ['type', 'routingKey'] });
-
-interface Logger {
-  debug(message?: any, ...optionalParams: any[]): void;
-  error(message?: any, ...optionalParams: any[]): void;
-  warn(message?: any, ...optionalParams: any[]): void;
-  info(message?: any, ...optionalParams: any[]): void;
-  trace(message?: any, ...optionalParams: any[]): void;
-  setName?(name: string): void;
-  setTrimLength?(trimLength: number): void;
-}
 
 interface RpcServer extends ChannelWrapper {
   heartbeatId: NodeJS.Timeout;
@@ -46,20 +39,6 @@ async function meter<T>(typeName: string, routingKey: string, f: () => Promise<T
     // @ts-ignore
     metric.observe(timer());
   }
-}
-
-export interface Context {
-  timeout?: number,
-  maxRetries?: number,
-  attemptNr?: number,
-  correlationId?: string,
-  messageId?: string,
-  clientMessageId?: string,
-  routingKey?: string,
-  timestamp?: number,
-  ip?: string,
-  userAgent?: string,
-  expiredAt?: number,
 }
 
 interface ChannelOptions {
@@ -92,6 +71,7 @@ interface ChannelConfig {
 }
 
 export interface RabbitConfig {
+  auth: AuthConfig
   host: string;
   username: string;
   password: string;
@@ -165,7 +145,12 @@ export class RabbitMqTransport {
 
   private contextStorage: { [key: string]: Context };
 
+  private authProvider: AuthProvider;
+
   async init(conf: RabbitConfig = {
+    auth: {
+      enabled: false,
+    },
     host: 'localhost',
     username: 'guest',
     password: 'guest',
@@ -246,6 +231,10 @@ export class RabbitMqTransport {
     this.contextStorage = {}; // storage for subscribe context
 
     this.channelConfigs = {};
+
+    this.authProvider = conf.auth.enabled
+      ? new AuthProviderImpl(conf.auth, this.logger)
+      : new NoopAuthProvider();
 
     if (this.autoinit) {
       await this.connect();
@@ -410,18 +399,22 @@ export class RabbitMqTransport {
     const bytes = Buffer.from(JSON.stringify({
       body: msg,
       routingKey,
-    }, null, 2));
+    }));
 
     // @ts-ignore
     const contextIds: { correlationId: string, messageId: string } | undefined = rTracer.id();
     const correlationId = uuidv4(); // id for matching request/response
     const corrId = context.correlationId ? context.correlationId : (contextIds?.correlationId ?? uuidv4()); // traceId
     const storedContext = contextIds ? this.contextStorage[contextIds?.messageId!] : undefined;
+    const time = Date.now();
 
-    const ctx = {
+    const preparedContext = {
       ...storedContext,
       ...context,
+      timestamp: time,
     };
+
+    const ctx = this.authProvider.sign(preparedContext, bytes);
 
     const { hasResponse } = { hasResponse: false, ...transportOptions };
     const propsBldr = {
@@ -435,9 +428,11 @@ export class RabbitMqTransport {
         'routing-key': realRoutingKey,
         'retry-max-attempts': ctx.maxRetries?.toString(10) ?? (hasResponse ? 0 : this.defaultCommandRetries.toString(10)), // commands retryable by default
         'expired-at': ctx.timeout ? (Date.now() + (ctx.timeout ?? 0)).toString(10) : null,
-        timestamp: Date.now().toString(10),
+        timestamp: time.toString(10),
         ip: ctx.ip,
         userAgent: ctx.userAgent,
+        origin: ctx.origin,
+        signature: ctx.signature,
       },
       mandatory: channel.mandatory,
     };
@@ -584,6 +579,8 @@ export class RabbitMqTransport {
               timestamp: toNumber(msg.properties.headers.timestamp),
               ip: msg.properties.headers.ip,
               userAgent: msg.properties.headers.userAgent,
+              origin: msg.properties.headers.origin,
+              signature: msg.properties.headers.signature,
               expiredAt: toNumber(msg.properties.headers['expired-at']),
             };
 
@@ -595,8 +592,11 @@ export class RabbitMqTransport {
 
             try {
               try {
+                // verify signature
+                this.authProvider.verify(context, msg.content);
+
                 const res = await Promise.resolve(handler(payload, context));
-                const bytes = Buffer.from(JSON.stringify({ status: '200', body: classToPlain(res) }, null, 2));
+                const bytes = Buffer.from(JSON.stringify({ status: '200', body: classToPlain(res) }));
 
                 if (msg.properties.replyTo) {
                   _this.logs('resp ~~~>', subscriptionName, bytes);
@@ -652,7 +652,7 @@ export class RabbitMqTransport {
                 }
               }
             } catch (e) {
-              const errMsg = e.message ? e.message : e.toString()
+              const errMsg = e.message ? e.message : e.toString();
               _this.logs('error', subscriptionName, Buffer.from(errMsg), e);
 
               if (msg.properties.replyTo != null) {
@@ -662,7 +662,7 @@ export class RabbitMqTransport {
                 } else {
                   response = { status: '500', body: { message: errMsg } };
                 }
-                const bytes = Buffer.from(JSON.stringify(response, null, 2));
+                const bytes = Buffer.from(JSON.stringify(response));
 
                 _this.logs('resp ~~~>', subscriptionName, bytes);
 
