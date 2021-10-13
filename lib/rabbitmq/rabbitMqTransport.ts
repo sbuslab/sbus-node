@@ -653,7 +653,7 @@ export class RabbitMqTransport {
               }
             } catch (e) {
               const errMsg = e.message ? e.message : e.toString();
-              _this.logs('error', subscriptionName, Buffer.from(errMsg), e);
+              _this.logs('error', subscriptionName, Buffer.from(''), e);
 
               if (msg.properties.replyTo != null) {
                 let response;
