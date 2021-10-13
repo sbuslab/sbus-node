@@ -32,7 +32,7 @@ export default class AuthProviderImpl implements AuthProvider {
 
   constructor(config: AuthConfig, logger: Logger) {
     this.originName = config.name!;
-    this.publicKeys = config.publicKeys!;
+    this.publicKeys = config.publicKeys ?? {};
     this.privKey = tweetnacl.sign.keyPair.fromSeed(Buffer.from(config.privKey!, 'hex'));
     this.access = config.access ?? {};
     this.groups = config.groups ?? {};
