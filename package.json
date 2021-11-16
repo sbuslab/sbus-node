@@ -1,6 +1,6 @@
 {
   "name": "sbus-node",
-  "version": "1.0.45",
+  "version": "1.1.45",
   "description": "Service Bus for nodeJs services with RabbitMQ transport",
   "keywords": [
     "RabbitMQ",
