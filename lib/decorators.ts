@@ -1,13 +1,14 @@
 import 'reflect-metadata';
 import { plainToClass } from 'class-transformer';
 import { validateOrReject } from 'class-validator';
-import moment, {DurationInputArg2} from 'moment';
+import moment, { DurationInputArg2 } from 'moment';
 import { BadRequestError } from './model/errorMessage';
 
 const INITED_SUBSCRIPTIONS = new Map<string, any[]>();
 
-type InitMethodDescriptor = TypedPropertyDescriptor<() => any>
-| TypedPropertyDescriptor<(...args: any) => Promise<any>>;
+const InitedPromises: any = [];
+
+type InitMethodDescriptor = TypedPropertyDescriptor<() => any> | TypedPropertyDescriptor<(...args: any) => Promise<any>>;
 
 // decorator for sbus subscriptions that transform message to class instance and validate it using class-validator
 export function subscribe(routingKey: string) {
@@ -58,6 +59,21 @@ export function schedule(period: string) {
   };
 }
 
+export async function initSbus() {
+  // eslint-disable-next-line no-restricted-syntax
+  for (const sub of InitedPromises) {
+    // eslint-disable-next-line no-await-in-loop
+    await sub.inited.sbus.on(sub.subscription.routingKey, sub.subscription.handler.value.bind(sub.inited));
+    if (sub.subscription.schedulePeriod) {
+      // eslint-disable-next-line no-await-in-loop
+      await sub.inited.sbus.command('scheduler.schedule', {
+        period: sub.subscription.schedulePeriod,
+        routingKey: sub.subscription.routingKey,
+      });
+    }
+  }
+}
+
 // decorator to enable all subscriptions that are presented in class
 export function autoSubscribe(target: any) {
   // save a reference to the original constructor
@@ -65,9 +81,9 @@ export function autoSubscribe(target: any) {
 
   // the new constructor behaviour
   // eslint-disable-next-line func-names
-  const f : any = async function (...args: any[]) {
+  const f : any = function (...args: any[]) {
     // eslint-disable-next-line new-cap
-    const inited = await new original(...args); // here constructor is with await for cases of other async decorators
+    const inited = new original(...args); // here constructor is with await for cases of other async decorators
 
     // @ts-ignore
     // eslint-disable-next-line no-proto
@@ -77,16 +93,14 @@ export function autoSubscribe(target: any) {
       // eslint-disable-next-line no-restricted-syntax
       for (const subscription of subscriptions) {
         // eslint-disable-next-line no-await-in-loop
-        await inited.sbus.on(subscription.routingKey, subscription.handler.value.bind(inited));
-        if (subscription.schedulePeriod) {
-          // eslint-disable-next-line no-await-in-loop
-          await inited.sbus.command('scheduler.schedule', {
-            period: subscription.schedulePeriod,
-            routingKey: subscription.routingKey,
-          });
-        }
+        InitedPromises.push({
+          inited,
+          subscription,
+        });
       }
     }
+
+    return inited;
   };
 
   // copy prototype so intanceof operator still works

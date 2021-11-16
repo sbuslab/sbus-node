@@ -1,7 +1,9 @@
 import Sbus from './lib/sbus';
 import { RabbitMqTransport, RabbitConfig } from './lib/rabbitmq/rabbitMqTransport';
 import { Context } from './lib/model/context';
-import { autoSubscribe, subscribe, schedule } from './lib/decorators';
+import {
+  autoSubscribe, subscribe, schedule, initSbus,
+} from './lib/decorators';
 import {
   GeneralError,
   NotFoundError,
@@ -23,6 +25,7 @@ export {
   Context,
   autoSubscribe,
   subscribe,
+  initSbus,
   schedule,
   GeneralError,
   NotFoundError,
