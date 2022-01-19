@@ -1,4 +1,4 @@
-import { ClassType } from 'class-transformer/ClassTransformer';
+import { ClassConstructor } from 'class-transformer';
 import { RabbitMqTransport } from './rabbitmq/rabbitMqTransport';
 import Unit from './utils/unit';
 import { Context } from './model/context';
@@ -10,7 +10,12 @@ export default class Sbus {
     this.transport = transport;
   }
 
-  async request<T>(routingKey: string, msg: string | object | null = null, cls: ClassType<T>, context: Context = {}): Promise<T> {
+  async request<T extends object>(
+    routingKey: string,
+    msg: string | object | null = null,
+    cls: ClassConstructor<T>,
+    context: Context = {},
+  ): Promise<T> {
     return this.transport.send<T>(routingKey, msg, cls, context, { hasResponse: true });
   }
 

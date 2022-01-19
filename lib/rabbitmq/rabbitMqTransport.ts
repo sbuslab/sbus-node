@@ -4,8 +4,7 @@ import util from 'util';
 import prometheus from 'prom-client';
 import { ConfirmChannel, ConsumeMessage } from 'amqplib';
 import { validateOrReject } from 'class-validator';
-import { classToPlain, plainToClass } from 'class-transformer';
-import { ClassType } from 'class-transformer/ClassTransformer';
+import { instanceToPlain, plainToInstance, ClassConstructor } from 'class-transformer';
 import { v4 as uuidv4 } from 'uuid';
 import { ExternalPromise, PROMISE_TIMEOUT_MESSAGE, promiseTimeout } from '../utils/promiseTimeout';
 import {
@@ -19,6 +18,7 @@ import { Context } from '../model/context';
 const eventsHeartbeat = new prometheus.Gauge({ name: 'sbus_events_heartbeat', help: 'Sbus events heartbeat', labelNames: ['routingKey'] });
 const histogram = new prometheus.Histogram({ name: 'sbus_processing_seconds', help: 'Sbus processing metrics', labelNames: ['type', 'routingKey'] });
 
+// @ts-ignore
 interface RpcServer extends ChannelWrapper {
   heartbeatId: NodeJS.Timeout;
   subscriptionName: string
@@ -56,7 +56,7 @@ interface ChannelOptions {
 
 interface ChannelConfig {
   name: string,
-  producer: amqp.ChannelWrapper;
+  producer: ChannelWrapper;
   exchange: string,
   exchangeType: string,
   retryExchange: string,
@@ -316,7 +316,7 @@ export class RabbitMqTransport {
     });
 
     this.correlationMap = {}; // correlation map for rpcClient
-    this.rpcClient = this.connection.createChannel() as RpcServer;
+    this.rpcClient = this.connection.createChannel() as unknown as RpcServer;
     this.rpcClient.on('error', (err) => {
       this.logger.error('Some error in rpc client channel', err);
     });
@@ -382,10 +382,10 @@ export class RabbitMqTransport {
     return;
   }
 
-  async send<T>(
+  async send<T extends object>(
     routingKey: string,
     msg: string | object | null,
-    cls: ClassType<T>,
+    cls: ClassConstructor<T>,
     context: Context = {},
     transportOptions: { hasResponse?: boolean } = {},
   ): Promise<T> {
@@ -444,7 +444,7 @@ export class RabbitMqTransport {
     await this.rpcClient._channel.publish(channel.exchange, realRoutingKey, bytes, propsBldr);
 
     if (!hasResponse) {
-      return plainToClass(cls, {});
+      return plainToInstance(cls, {});
     }
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -487,7 +487,15 @@ export class RabbitMqTransport {
       const parsed = JSON.parse(response.toString());
 
       if (parsed.status < 400) {
-        const deserialized = plainToClass(cls, parsed.body);
+        const deserialized = plainToInstance(cls, parsed.body);
+
+        if (typeof deserialized === 'undefined' || deserialized === null) {
+          if (cls === Unit) {
+            return deserialized;
+          }
+
+          throw new InternalServerError('undefined or empty body, but expected some value');
+        }
 
         await validateOrReject(deserialized);
         return deserialized;
@@ -508,7 +516,7 @@ export class RabbitMqTransport {
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const _this = this;
 
-    const rpcServer = this.connection.createChannel() as RpcServer;
+    const rpcServer = this.connection.createChannel() as unknown as RpcServer;
     await rpcServer.waitForConnect();
 
     rpcServer._channel.on('error', (err) => {
@@ -596,7 +604,7 @@ export class RabbitMqTransport {
                 this.authProvider.verify(context, msg.content);
 
                 const res = await Promise.resolve(handler(payload, context));
-                const bytes = Buffer.from(JSON.stringify({ status: '200', body: classToPlain(res) }));
+                const bytes = Buffer.from(JSON.stringify({ status: '200', body: instanceToPlain(res) }));
 
                 if (msg.properties.replyTo) {
                   _this.logs('resp ~~~>', subscriptionName, bytes);
