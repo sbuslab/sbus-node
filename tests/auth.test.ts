@@ -101,7 +101,7 @@ afterAll(async () => {
 });
 
 test('should auth user', async () => {
-  await sbusReceiver.on('check', (_req) => Promise.resolve({
+  await sbusReceiver.on('check', () => Promise.resolve({
     foo: 'ok',
   }));
 
@@ -113,11 +113,11 @@ test('should auth user', async () => {
 });
 
 test('should send event', async () => {
-  await sbusReceiver.on('events:test-event', (_req) => Promise.resolve({
+  await sbusReceiver.on('events:test-event', () => Promise.resolve({
     foo: 'ok',
   }));
 
-  const res = await sbusSender.event('test-event', {
+  await sbusSender.event('test-event', {
     foo: 'bar',
   });
 });

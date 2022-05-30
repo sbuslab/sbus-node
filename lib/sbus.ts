@@ -12,6 +12,7 @@ export default class Sbus {
 
   async request<T extends object>(
     routingKey: string,
+    // eslint-disable-next-line @typescript-eslint/default-param-last
     msg: string | object | null = null,
     cls: ClassConstructor<T>,
     context: Context = {},

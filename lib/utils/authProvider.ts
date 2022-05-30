@@ -1,5 +1,5 @@
 // eslint-disable-next-line max-classes-per-file
-import tweetnacl, {SignKeyPair} from 'tweetnacl';
+import tweetnacl, { SignKeyPair } from 'tweetnacl';
 import { Logger } from '../model/logger';
 import { Context } from '../model/context';
 

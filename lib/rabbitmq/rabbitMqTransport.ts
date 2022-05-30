@@ -285,7 +285,7 @@ export class RabbitMqTransport {
       for (const name of Object.keys(this.channels)) {
         const config = this.channels[name];
 
-        const cfg = { ...this.channels.default, ...config };
+        const cfg: ChannelOptions  = { ...this.channels.default, ...config };
 
         /* eslint-disable no-await-in-loop */
         await channel.assertExchange(cfg.exchange, cfg.exchangeType, { durable: false }); // exchange
@@ -397,7 +397,7 @@ export class RabbitMqTransport {
     }
 
     const bytes = Buffer.from(JSON.stringify({
-      body: msg,
+      body: instanceToPlain(msg),
       routingKey,
     }));
 
@@ -426,7 +426,7 @@ export class RabbitMqTransport {
       headers: {
         'correlation-id': corrId,
         'routing-key': realRoutingKey,
-        'retry-max-attempts': ctx.maxRetries?.toString(10) ?? (hasResponse ? 0 : this.defaultCommandRetries.toString(10)), // commands retryable by default
+        'retry-max-attempts': ctx.maxRetries?.toString() ?? (hasResponse ? 0 : this.defaultCommandRetries.toString(10)), // commands retryable by default
         'expired-at': ctx.timeout ? (Date.now() + (ctx.timeout ?? 0)).toString(10) : null,
         timestamp: time.toString(10),
         ip: ctx.ip,
@@ -467,11 +467,11 @@ export class RabbitMqTransport {
 
     this.correlationMap[correlationId].routingKey = routingKey;
 
-    return await meter<T>('request', realRoutingKey, async () => {
+    return meter<T>('request', realRoutingKey, async () => {
       let response;
       try {
         response = await promiseTimeout(parseInt(propsBldr.expiration ?? '0', 10), this.correlationMap[correlationId]);
-      } catch (err) {
+      } catch (err: any) {
         if (err === PROMISE_TIMEOUT_MESSAGE) {
           this.logs('timeout error', realRoutingKey, bytes, err);
 
@@ -565,7 +565,7 @@ export class RabbitMqTransport {
             let payload;
             try {
               payload = JSON.parse(msg.content.toString()).body;
-            } catch (e) {
+            } catch (e: any) {
               payload = msg.content.toString();
             }
 
@@ -621,7 +621,7 @@ export class RabbitMqTransport {
                   );
                 }
                 return;
-              } catch (e) {
+              } catch (e: any) {
                 if (!(e instanceof GeneralError) || e.unrecoverable) {
                   const heads = msg.properties.headers;
                   const attemptsMax = heads['retry-max-attempts'];
@@ -648,7 +648,7 @@ export class RabbitMqTransport {
                       try {
                         // eslint-disable-next-line max-len
                         await channel.producer.publish(channel.retryExchange, channel.queueNameFormat.replace('%s', originRoutingKey), msg.content, updProps);
-                      } catch (error) {
+                      } catch (error: any) {
                         throw new InternalServerError(`Error on publish retry message for ${originRoutingKey}: ${error}`);
                       }
                     }
@@ -659,7 +659,7 @@ export class RabbitMqTransport {
                   throw e;
                 }
               }
-            } catch (e) {
+            } catch (e: any) {
               const errMsg = e.message ? e.message : e.toString();
               _this.logs('error', subscriptionName, Buffer.from(''), e);
 

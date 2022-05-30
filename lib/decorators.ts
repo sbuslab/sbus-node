@@ -31,7 +31,7 @@ export function subscribe(routingKey: string) {
 
         try {
           await Promise.all(promises);
-        } catch (e) {
+        } catch (e: any) {
           throw new BadRequestError({ message: e[0].toString(), error: 'validation-error' });
         }
 
